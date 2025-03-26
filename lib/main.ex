@@ -24,7 +24,7 @@ defmodule Server do
     {:ok, request} = :gen_tcp.recv(client, 0)
 
     response = handle_request(request)
-    IO.puts("\nReceived request: #{request}")
+    IO.puts("\nReceived request: \n#{request}")
 
     :gen_tcp.send(client, response)
     :gen_tcp.close(client)
@@ -45,6 +45,9 @@ defmodule Server do
 
   defp format_response(%{ method: "GET", path: "/" }) do
     "HTTP/1.1 200 OK\r\n\r\n"
+  end
+  defp format_response(%{ method: "GET", path: "/echo/" <> str}) do
+    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{byte_size(str)}\r\n\r\n#{str}"
   end
   defp format_response(_conv) do
     "HTTP/1.1 404 Not Found\r\n\r\n"
