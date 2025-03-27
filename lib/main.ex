@@ -71,10 +71,16 @@ defmodule Server do
   end
 
   defp format_response(%{method: "GET", path: "/files/" <> filename}) do
-    content = FileServer.serve(filename)
-    size = byte_size(content)
+    case FileServer.serve(filename) do
+      {:ok, content} ->
+        size = byte_size(content)
 
-    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: #{size}\r\n\r\n#{content}"
+        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: #{size}\r\n\r\n#{content}"
+
+      _ ->
+        # returns 404
+        format_response({})
+    end
   end
 
   defp format_response(_conv) do

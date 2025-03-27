@@ -2,8 +2,7 @@ defmodule FileServer do
   def serve(file) do
     %{"--directory" => file_dir} = parse_args(System.argv())
 
-    {:ok, content} = File.read("#{file_dir}#{file}")
-    content
+    File.read("#{file_dir}#{file}")
   end
 
   defp parse_args(args),
