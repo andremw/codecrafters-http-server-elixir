@@ -19,9 +19,9 @@ defmodule Server do
   end
 
   def listen_loop(socket) do
-    spawn(fn ->
-      {:ok, client} = :gen_tcp.accept(socket)
+    {:ok, client} = :gen_tcp.accept(socket)
 
+    spawn(fn ->
       {:ok, request} = :gen_tcp.recv(client, 0)
 
       response = handle_request(request)
@@ -68,6 +68,13 @@ defmodule Server do
 
   defp format_response(%{method: "GET", path: "/user-agent", headers: %{"User-Agent" => ua}}) do
     "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{byte_size(ua)}\r\n\r\n#{ua}"
+  end
+
+  defp format_response(%{method: "GET", path: "/files/" <> filename}) do
+    content = FileServer.serve(filename)
+    size = byte_size(content)
+
+    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: #{size}\r\n\r\n#{content}"
   end
 
   defp format_response(_conv) do
