@@ -25,7 +25,7 @@ defmodule Server do
       {:ok, request} = :gen_tcp.recv(client, 0)
 
       response = handle_request(request)
-      # IO.puts("\nReceived request: \n#{request}")
+      IO.puts("\nReceived request: \n#{request}")
 
       :gen_tcp.send(client, response)
       :gen_tcp.close(client)
@@ -41,21 +41,27 @@ defmodule Server do
   end
 
   defp parse(request) do
-    [top, _] = request |> String.split("\r\n\r\n")
+    [top, body] = request |> String.split("\r\n\r\n")
     [request_line | headers_line] = top |> String.split("\r\n")
     [method, path, _] = request_line |> String.split(" ")
     # IO.puts("headers_line:\n")
     # IO.inspect(headers_line)
-    headers =
-      headers_line
-      |> Enum.reduce(%{}, fn header_line, acc ->
-        [key, value] = header_line |> String.split(": ")
-        Map.put(acc, key, value)
-      end)
+    headers = headers_line_to_map(headers_line)
 
     # IO.puts("headers: ")
     # IO.inspect(headers)
-    %{method: method, path: path, headers: headers}
+
+    body = body |> String.split("\r\n")
+
+    %{method: method, path: path, headers: headers, body: body}
+  end
+
+  defp headers_line_to_map(headers_line) do
+    headers_line
+    |> Enum.reduce(%{}, fn header_line, acc ->
+      [key, value] = header_line |> String.split(": ")
+      Map.put(acc, key, value)
+    end)
   end
 
   defp format_response(%{method: "GET", path: "/"}) do
@@ -70,6 +76,7 @@ defmodule Server do
     "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{byte_size(ua)}\r\n\r\n#{ua}"
   end
 
+  ### /files
   defp format_response(%{method: "GET", path: "/files/" <> filename}) do
     case FileServer.serve(filename) do
       {:ok, content} ->
@@ -81,6 +88,16 @@ defmodule Server do
         # returns 404
         format_response({})
     end
+  end
+
+  defp format_response(%{
+         method: "POST",
+         path: "/files/" <> filename,
+         headers: %{"Content-Type" => "application/octet-stream", "Content-Length" => _size},
+         body: content
+       }) do
+    FileServer.create(filename, content)
+    "HTTP/1.1 201 Created\r\n\r\n"
   end
 
   defp format_response(_conv) do
