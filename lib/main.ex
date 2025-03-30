@@ -69,16 +69,16 @@ defmodule Server do
   end
 
   defp format_response(%{method: "GET", path: "/echo/" <> str, headers: headers}) do
-    content_encoding =
+    {content_encoding, str} =
       case Map.get(headers, "Accept-Encoding") do
         encodings when not is_nil(encodings) ->
           case String.contains?(encodings, "gzip") do
-            true -> "\r\nContent-Encoding: gzip"
-            false -> ""
+            true -> {"\r\nContent-Encoding: gzip", str |> :zlib.gzip()}
+            false -> {"", str}
           end
 
         _ ->
-          ""
+          {"", str}
       end
 
     "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{byte_size(str)}" <>
