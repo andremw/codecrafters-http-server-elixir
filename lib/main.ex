@@ -68,8 +68,19 @@ defmodule Server do
     "HTTP/1.1 200 OK\r\n\r\n"
   end
 
-  defp format_response(%{method: "GET", path: "/echo/" <> str}) do
-    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{byte_size(str)}\r\n\r\n#{str}"
+  defp format_response(%{method: "GET", path: "/echo/" <> str, headers: headers}) do
+    content_encoding =
+      case Map.get(headers, "Accept-Encoding") do
+        "gzip" ->
+          "\r\nContent-Encoding: gzip"
+
+        _ ->
+          ""
+      end
+
+    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{byte_size(str)}" <>
+      content_encoding <>
+      "\r\n\r\n#{str}"
   end
 
   defp format_response(%{method: "GET", path: "/user-agent", headers: %{"User-Agent" => ua}}) do
