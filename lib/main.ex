@@ -37,11 +37,22 @@ defmodule Server do
   end
 
   defp handle_request(request) do
+    request = parse(request)
+
     request
-    |> parse
     |> handle
+    |> gzip_if_necessary(request.headers)
     |> Response.format()
   end
+
+  defp gzip_if_necessary(response, %{"Accept-Encoding" => encodings}) do
+    case String.contains?(encodings, "gzip") do
+      false -> response
+      true -> Response.gzip(response)
+    end
+  end
+
+  defp gzip_if_necessary(response, _), do: response
 
   defp parse(request) do
     [top, body] = request |> String.split("\r\n\r\n")
@@ -66,8 +77,8 @@ defmodule Server do
     %Response{status_code: 200, headers: %{}, body: nil}
   end
 
-  defp handle(%{method: "GET", path: "/echo/" <> str, headers: headers}) do
-    response = %Response{
+  defp handle(%{method: "GET", path: "/echo/" <> str}) do
+    %Response{
       status_code: 200,
       headers: %{
         "Content-Type" => "text/plain",
@@ -75,17 +86,6 @@ defmodule Server do
       },
       body: str
     }
-
-    case Map.get(headers, "Accept-Encoding") do
-      encodings when not is_nil(encodings) ->
-        case String.contains?(encodings, "gzip") do
-          true -> Response.gzip(response)
-          false -> response
-        end
-
-      _ ->
-        response
-    end
   end
 
   defp handle(%{method: "GET", path: "/user-agent", headers: %{"User-Agent" => ua}}) do
