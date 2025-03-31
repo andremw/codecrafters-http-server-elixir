@@ -1,6 +1,8 @@
 defmodule Server do
   use Application
 
+  alias Response
+
   def start(_type, _args) do
     Supervisor.start_link([{Task, fn -> Server.listen() end}], strategy: :one_for_one)
   end
@@ -37,19 +39,15 @@ defmodule Server do
   defp handle_request(request) do
     request
     |> parse
-    |> format_response
+    |> handle
+    |> Response.format()
   end
 
   defp parse(request) do
     [top, body] = request |> String.split("\r\n\r\n")
     [request_line | headers_line] = top |> String.split("\r\n")
     [method, path, _] = request_line |> String.split(" ")
-    # IO.puts("headers_line:\n")
-    # IO.inspect(headers_line)
     headers = headers_line_to_map(headers_line)
-
-    # IO.puts("headers: ")
-    # IO.inspect(headers)
 
     body = body |> String.split("\r\n")
 
@@ -64,58 +62,80 @@ defmodule Server do
     end)
   end
 
-  defp format_response(%{method: "GET", path: "/"}) do
-    "HTTP/1.1 200 OK\r\n\r\n"
+  defp handle(%{method: "GET", path: "/"}) do
+    %Response{status_code: 200, headers: %{}, body: nil}
   end
 
-  defp format_response(%{method: "GET", path: "/echo/" <> str, headers: headers}) do
-    {content_encoding, str} =
-      case Map.get(headers, "Accept-Encoding") do
-        encodings when not is_nil(encodings) ->
-          case String.contains?(encodings, "gzip") do
-            true -> {"\r\nContent-Encoding: gzip", str |> :zlib.gzip()}
-            false -> {"", str}
-          end
+  defp handle(%{method: "GET", path: "/echo/" <> str, headers: headers}) do
+    response = %Response{
+      status_code: 200,
+      headers: %{
+        "Content-Type" => "text/plain",
+        "Content-Length" => byte_size(str)
+      },
+      body: str
+    }
 
-        _ ->
-          {"", str}
-      end
+    case Map.get(headers, "Accept-Encoding") do
+      encodings when not is_nil(encodings) ->
+        case String.contains?(encodings, "gzip") do
+          true -> Response.gzip(response)
+          false -> response
+        end
 
-    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{byte_size(str)}" <>
-      content_encoding <>
-      "\r\n\r\n#{str}"
+      _ ->
+        response
+    end
   end
 
-  defp format_response(%{method: "GET", path: "/user-agent", headers: %{"User-Agent" => ua}}) do
-    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{byte_size(ua)}\r\n\r\n#{ua}"
+  defp handle(%{method: "GET", path: "/user-agent", headers: %{"User-Agent" => ua}}) do
+    %Response{
+      status_code: 200,
+      headers: %{
+        "Content-Type" => "text/plain",
+        "Content-Length" => byte_size(ua)
+      },
+      body: ua
+    }
   end
 
   ### /files
-  defp format_response(%{method: "GET", path: "/files/" <> filename}) do
+  defp handle(%{method: "GET", path: "/files/" <> filename}) do
     case FileServer.serve(filename) do
       {:ok, content} ->
         size = byte_size(content)
 
-        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: #{size}\r\n\r\n#{content}"
+        %Response{
+          status_code: 200,
+          headers: %{
+            "Content-Type" => "application/octet-stream",
+            "Content-Length" => size
+          },
+          body: content
+        }
 
       _ ->
         # returns 404
-        format_response({})
+        %Response{
+          status_code: 404,
+          headers: %{},
+          body: nil
+        }
     end
   end
 
-  defp format_response(%{
+  defp handle(%{
          method: "POST",
          path: "/files/" <> filename,
          headers: %{"Content-Type" => "application/octet-stream", "Content-Length" => _size},
          body: content
        }) do
     FileServer.create(filename, content)
-    "HTTP/1.1 201 Created\r\n\r\n"
+    %Response{status_code: 201, body: nil, headers: %{}}
   end
 
-  defp format_response(_conv) do
-    "HTTP/1.1 404 Not Found\r\n\r\n"
+  defp handle(_conv) do
+    %Response{status_code: 404, body: nil, headers: %{}}
   end
 end
 
